@@ -1,0 +1,2 @@
+# machine-learning
+Code to experiment with various machine learning libraries, techniques, etc.  Mostly for learning these pieces myself.  I will avoid uploading datasets but will include a reference to it in the code and a separate file called data.ref anywhere I make use of public data.  In come cases i'll include a data fetcher which grabs the data from specific sites and i'll include information about how to run it.
