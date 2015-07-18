@@ -1,0 +1,35 @@
+
+
+slda accepts a label file and a data file.  Some documents may actually have multiple lables assocaited with it.
+For those docs, copy the document summary for each label and treat it as a seaprate entry:
+
+[l1,l2,l3] [d]-> [l1 d][l2 d][l3 d]
+
+Where d is the document and l1, l2, l3 are the labels (categories) for the document
+
+
+Check out the readme.txt in the slda folder:
+
+Doc format:
+    [M] [term_1]:[count] [term_2]:[count] ...  [term_N]:[count]
+
+Label file format:
+    The labels must be 0, 1, ..., C-1, if we have C classes.
+
+
+Full text:
+    Data format
+
+    (1) [data] is a file where each line is of the form:
+
+         [M] [term_1]:[count] [term_2]:[count] ...  [term_N]:[count]
+
+    where [M] is the number of unique terms in the document, and the
+    [count] associated with each term is how many times that term appeared
+    in the document. 
+
+    (2) [label] is a file where each line is the corresponding label for [data].
+    The labels must be 0, 1, ..., C-1, if we have C classes.
+
+slda: https://github.com/Blei-Lab/class-slda
+
