@@ -2,6 +2,7 @@ import sys
 import httplib2
 import json
 from tabulate import tabulate
+from sets import Set
 import os
 
 class OpenDataFetcher:
@@ -34,8 +35,8 @@ class OpenDataFetcher:
         table_data = []
         resources = None
 
-        print "parameters [domain=" + domain + ", id=" + str(dataset_id)#+ ", desc=" + str(data_desc) + \
-                #", get_data=" + str(get_data) +"]"
+        print "parameters [domain=" + domain + ", id=" + str(dataset_id)+ ", desc=" + str(data_desc) + \
+                ", get_data=" + str(get_data) +"]"
 
         if domain is not None:
             if dataset_id is not None and get_data is False:
@@ -90,14 +91,17 @@ class OpenDataFetcher:
                                     _data_id = r['datasetId']
                                 _url = "http://" + domain + "/resource/" + _data_id + ".json"
                                 _resp,_content = self.h.request(_url)
-                                print _content
+                                #print _content
+                                [topics,desc]=self._td_info(domain,dataset_id)
+                                print str([topics,desc])
+                                print self.make_doc(json.loads(_content),desc)
                                 if not _content:
                                     break
                                 elif len(_content)>0:
                                     _id_stamp = _data_id + '::[' + _url + ']::' 
                                     _line = ''.join(_content.split())
                                     _line = _id_stamp + _line + "\n"
-                                    print _line
+                                    #print _line
                                     if _file is not None:
                                         _file.write(_line)
                             else:
@@ -108,16 +112,112 @@ class OpenDataFetcher:
                             _file.close()
                 else:
                     resp,content = self.h.request("http://" + domain + "/resource/" + dataset_id + ".json")
-                    print content
+                    #print content
+                    [topics,desc]=self._td_info(domain,dataset_id)
+                    print str([topics,desc])
+                    print self.make_doc(json.loads(content),desc)
                     if _file is not None:
                         _line=''.join(content.split())
                         _file.write(_line)
                         _file.close()
                 return content
                     
-    def blei_format(self):
-        return
+    def blei_format(self, category=None, raw_doc=None):
+        '''
+        Check out the readme.txt in the slda folder: https://github.com/chbrown/slda/blob/master/README.md
         
+        Data format
+            (1) [data] is a file where each line is of the form:
+
+                 [M] [term_1]:[count] [term_2]:[count] ...  [term_N]:[count]
+
+            where [M] is the number of unique terms in the document, and the
+            [count] associated with each term is how many times that term appeared
+            in the document. 
+
+            (2) [label] is a file where each line is the corresponding label for [data].
+            The labels must be 0, 1, ..., C-1, if we have C classes.
+        '''
+        return
+
+
+    def __place_holder(self):
+        '''
+        Vocabulary --> extracted from the corpus
+            words (space delimiters)
+            tokens (n-gram)
+        Labels --> topic
+        '''
+        return
+
+    def make_doc(self, raw=[], desc=None):
+        '''
+        Accepts an array of json docs and creates a corpus file:
+        Format::
+            a1 a2 ... ak desc a1_v a1_v2 ... a1_vn ... ak_vn
+
+        where {a1,...ak} are the set of attributes (columns)
+        and {ak_v1,...,ak_vn} are the set of values associated with attribute the kth attribute
+        the desc(description) is appended to the end of corpus
+        *Each value is seprated by spaces
+
+        The order is does not matter.  The raw input is converted into a document of words
+        that include the words described above.
+        '''
+        doc = None
+        if raw is not None:
+            attr_set = Set()
+            values = ""
+            for doc_i in raw:
+                new_attrs=Set(doc_i.keys())
+                attr_set = attr_set|new_attrs
+                vals =''
+                for v in doc_i.values():
+                    #ignore non-strings, since we don't really know how to deal with those
+                    if isinstance(v,(str,unicode)):
+                        vals = vals+" " + v.strip()
+                        
+                values = values+" " + vals
+            if desc is None:
+                desc=""
+            doc = ' '.join(list(attr_set))
+            doc = doc + " "+ desc + values
+        return doc
+
+    def _td_info(self, domain, _id):
+        topics=[]
+        description=""
+        if domain is not None and _id is not None:
+            resp,content = self.h.request(self.root_url+self.query_root+domain)
+            cobj = json.loads(content)
+            if cobj.has_key("results"):
+                results = cobj['results']
+                for r in results:
+                    if r.has_key("resource") and r.has_key("classification"):
+                        resource = r['resource']
+                        _this_id=None
+                        if resource.has_key('id'):
+                            _this_id = resource['id']
+                        elif resource.has_key('datasetId'):
+                            _this_id = resource['datasetId']
+                        else:
+                            break
+                        classification = r['classification']
+                        if _this_id==_id: 
+                            topics = Set()
+                            if classification.has_key("categories"):
+                                topics = Set(classification["categories"])
+                            if classification.has_key("tags"):
+                                topics = topics | Set(classification["tags"])
+                            topics = list(topics)
+                        if resource.has_key("description"):
+                            description = resource["description"]
+        if len(topics)==0:
+            topics.append("None")
+        return [topics, description]
+        
+
+
 def main(args):
     fetcher = OpenDataFetcher()
     domain=None
@@ -144,7 +244,7 @@ def main(args):
             elif args[idx]=="--output" and idx<len(args)-1:
                 output_file = file(os.path.abspath(args[idx+1]), 'a')
         info=fetcher.getInfo(domain, dataset_id, data_desc, get_data,_file=output_file)
-        print info
+        #print info
         if blei_format:
             fetcher.blei_format(info)
     else:
