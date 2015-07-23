@@ -4,6 +4,7 @@ import json
 from tabulate import tabulate
 from sets import Set
 import os
+from sklearn.feature_extraction.text import CountVectorizer as CV
 
 class OpenDataFetcher:
     def __init__(self):
@@ -30,7 +31,7 @@ class OpenDataFetcher:
             table_data.append(row)
         print tabulate(table_data, table_header)
 
-    def getInfo(self, domain=None, dataset_id=None, data_desc=False, get_data=False, _file=None):
+    def getInfo(self, domain=None, dataset_id=None, data_desc=False, get_data=False, _file=None, bf=False):
         table_header = []
         table_data = []
         resources = None
@@ -64,6 +65,7 @@ class OpenDataFetcher:
                     resources = json.loads(content)
                     resources = resources["results"]
                     table_header = ['id','description']
+                    cnt = 0
                     for resObj in resources:
                         r = resObj['resource']
                         row = []
@@ -73,7 +75,8 @@ class OpenDataFetcher:
                             row.append(r['description'])
                             table_data.append(row)
                     return tabulate(table_data, table_header)
-            elif dataset_id is not None and get_data is True and dataset_id is not None:
+            elif dataset_id is not None and get_data is True:
+                #print "id=" + dataset_id
                 if dataset_id == '*':
                     resp,content=self.h.request(self.root_url+self.query_root+domain)
                     if not content:
@@ -81,6 +84,8 @@ class OpenDataFetcher:
                     else:
                         resources = json.loads(content)
                         resources = resources["results"]
+                        raw_docs = []
+                        labels = []
                         for resObj in resources:
                             r = resObj['resource']
                             if r.has_key('id') or r.has_key('datasetId'):
@@ -93,36 +98,51 @@ class OpenDataFetcher:
                                 _resp,_content = self.h.request(_url)
                                 #print _content
                                 [topics,desc]=self._td_info(domain,dataset_id)
-                                print str([topics,desc])
-                                print self.make_doc(json.loads(_content),desc)
+                                raw_doc = self.make_doc(json.loads(_content),desc)
+                                #print str([topics,desc])
+                                #print raw_doc
+                                if bf:
+                                    raw_docs.append(raw_doc)
+                                    labels.append(topics)
                                 if not _content:
                                     break
                                 elif len(_content)>0:
                                     _id_stamp = _data_id + '::[' + _url + ']::' 
-                                    _line = ''.join(_content.split())
+                                    #_line = ''.join(_content.split())
+                                    _line = raw_doc
                                     _line = _id_stamp + _line + "\n"
                                     #print _line
                                     if _file is not None:
-                                        _file.write(_line)
+                                        _file.write(_line.encode("utf-8"))
                             else:
                                 logf = file("file.log","a")
                                 logf.write(str(r) + "\n")
                                 logf.close()
                         if _file is not None:
                             _file.close()
+                        if bf and len(raw_docs)>0 and len(raw_docs)==len(labels):
+                            self.blei_formatter(labels,raw_docs)
                 else:
                     resp,content = self.h.request("http://" + domain + "/resource/" + dataset_id + ".json")
                     #print content
                     [topics,desc]=self._td_info(domain,dataset_id)
-                    print str([topics,desc])
-                    print self.make_doc(json.loads(content),desc)
+                    #print str([topics,desc])
+                    raw_doc = self.make_doc(json.loads(content),desc)
+                    #print raw_doc
+                    
                     if _file is not None:
                         _line=''.join(content.split())
                         _file.write(_line)
                         _file.close()
+
+                    raw_docs = [raw_doc,raw_doc+" sdnaksjn"]
+                    labels = [topics, [topics[0]] ]
+                    if bf and len(raw_docs)>0 and len(raw_docs)==len(labels):
+                            self.blei_formatter(labels,raw_docs)
+                        
                 return content
                     
-    def blei_format(self, category=None, raw_doc=None):
+    def blei_formatter(self, cats=[], raw_docs=[], name='default'):
         '''
         Check out the readme.txt in the slda folder: https://github.com/chbrown/slda/blob/master/README.md
         
@@ -132,12 +152,42 @@ class OpenDataFetcher:
                  [M] [term_1]:[count] [term_2]:[count] ...  [term_N]:[count]
 
             where [M] is the number of unique terms in the document, and the
-            [count] associated with each term is how many times that term appeared
-            in the document. 
-
+            [count] associated with each term is how many times that term appeared in the document.  
             (2) [label] is a file where each line is the corresponding label for [data].
             The labels must be 0, 1, ..., C-1, if we have C classes.
         '''
+        cv = CV(ngram_range=(2,3),min_df=2,analyzer='char_wb')
+        dtmat=cv.fit_transform(raw_docs)
+        #print vocab file
+        '''
+        rv = {v:k for k,v in cv.vocabulary_.items()}
+        cnt=0
+        vfile = file(name+".terms","w+")
+        while cnt in rv.keys():
+            #print rv[cnt]  
+            vfile.write(rv[cnt]+"\n")
+        vfile.close()
+        '''
+
+        # write out labels and data
+        for doc_id in range(0,len(raw_docs)):
+            uterms = 0
+            _docfstr = ""
+            shape = dtmat.shape #[n_samples, n_features]
+            #tcats = cats[doc_id]
+            for feature in range(0,shape[1]):
+                if feature==0:
+                    _docfstr = str(feature) + ":" + str(dtmat[doc_id,feature])
+                else:
+                    _docfstr = _docfstr + " " + str(feature) + ":" + str(dtmat[doc_id,feature])
+                uterms += dtmat[doc_id,feature]
+            _docfstr = str(uterms) + " " + _docfstr
+            '''
+            for ncats in range(0,len(tcats)):
+                print tcats[ncats] + "\t" + _docfstr
+            '''
+            print _docfstr
+                
         return
 
 
@@ -243,10 +293,11 @@ def main(args):
                 blei_format = True
             elif args[idx]=="--output" and idx<len(args)-1:
                 output_file = file(os.path.abspath(args[idx+1]), 'a')
-        info=fetcher.getInfo(domain, dataset_id, data_desc, get_data,_file=output_file)
+            elif args[idx]=="--h" or args[idx]=="--help":
+                print "python df.py [--domain [domain]] [--id id|'*'] [--description] [--data] [--blei] [--output path-to-file]"
+                return
+        info=fetcher.getInfo(domain, dataset_id, data_desc, get_data,_file=output_file,bf=blei_format)
         #print info
-        if blei_format:
-            fetcher.blei_format(info)
     else:
         fetcher.printDomainInfo()
 
