@@ -45,7 +45,9 @@ class Vector(object):
         return Vector(s_)
 
     def magnitude(self):
-        return math.sqrt(sum([x**2 for x in self.coordinates]))
+        #for x in self.coordinates:
+        #    print x
+        return math.sqrt(sum([float(x)**2 for x in self.coordinates]))
 
     def normalize(self):
         if self.magnitude()==0:
@@ -53,7 +55,7 @@ class Vector(object):
         return self*(1/self.magnitude())
 
     def dot(self, x):
-        return sum([x*y for x,y in zip(x.coordinates, self.coordinates)])
+        return sum([float(x)*float(y) for x,y in zip(x.coordinates, self.coordinates)])
 
     def angle_rads(self, x):
         mag_x = x.magnitude()
